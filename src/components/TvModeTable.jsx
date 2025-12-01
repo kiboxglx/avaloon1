@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const getTimeAgo = (dateString) => {
     if (!dateString) return 'Hoje';
@@ -18,23 +18,32 @@ const getTimeAgo = (dateString) => {
 };
 
 const TvModeTable = ({ clients, onExit }) => {
+    const [startIndex, setStartIndex] = useState(0);
     const [currentTime, setCurrentTime] = useState(new Date());
-    const scrollRef = useRef(null);
-
-    // Duplicate clients to create a seamless loop
-    const scrollingClients = [...clients, ...clients];
+    const ITEMS_PER_PAGE = 7;
+    const PAGE_DURATION = 10000; // 10 seconds per page
 
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(timer);
     }, []);
 
-    // Calculate duration based on number of items to maintain consistent speed
-    // e.g., 3 seconds per item
-    const duration = clients.length * 4;
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setStartIndex((prev) => {
+                const next = prev + ITEMS_PER_PAGE;
+                return next >= clients.length ? 0 : next;
+            });
+        }, PAGE_DURATION);
+        return () => clearInterval(interval);
+    }, [clients.length]);
+
+    const visibleClients = clients.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+    const totalPages = Math.ceil(clients.length / ITEMS_PER_PAGE);
+    const currentPage = Math.floor(startIndex / ITEMS_PER_PAGE) + 1;
 
     return (
-        <div className="fixed inset-0 z-50 bg-zinc-950 flex flex-col font-sans">
+        <div className="fixed inset-0 z-50 bg-zinc-950 flex flex-col font-sans selection:bg-yellow-500 selection:text-black">
             {/* Header for TV Mode */}
             <div className="bg-zinc-900 p-6 border-b border-zinc-800 flex justify-between items-center shadow-lg z-20">
                 <div className="flex items-center gap-8">
@@ -67,23 +76,23 @@ const TvModeTable = ({ clients, onExit }) => {
                 </div>
             </div>
 
-            {/* Scrolling Body */}
-            <div className="flex-1 overflow-hidden relative bg-zinc-950">
-                <div
-                    className="absolute w-full"
-                    style={{
-                        animation: `scrollVertical ${duration}s linear infinite`
-                    }}
-                >
-                    {scrollingClients.map((client, index) => {
+            {/* Body with Flip Animation */}
+            <div className="flex-1 p-6 overflow-hidden bg-zinc-950 perspective-1000">
+                <div className="flex flex-col gap-3">
+                    {visibleClients.map((client, index) => {
                         const isAlert = client.days > 2;
                         const isWarning = client.days >= 1 && client.days <= 2;
-                        const uniqueKey = `${client.id}-${index}`; // Ensure unique key for duplicated items
+                        // Key includes startIndex to trigger re-render and animation on page change
+                        const uniqueKey = `${client.id}-${startIndex}`;
 
                         return (
                             <div
                                 key={uniqueKey}
-                                className={`grid grid-cols-12 gap-4 p-4 px-8 border-b border-zinc-900 items-center ${index % 2 === 0 ? 'bg-zinc-900/30' : 'bg-transparent'}`}
+                                className={`grid grid-cols-12 gap-4 p-4 px-8 border border-zinc-800/50 bg-zinc-900/50 items-center rounded-sm animate-flip-in shadow-lg`}
+                                style={{
+                                    animationDelay: `${index * 150}ms`,
+                                    borderLeft: isAlert ? '4px solid #ef4444' : isWarning ? '4px solid #eab308' : '4px solid #22c55e'
+                                }}
                             >
                                 {/* Client Name & Username */}
                                 <div className="col-span-4">
@@ -128,33 +137,64 @@ const TvModeTable = ({ clients, onExit }) => {
                             </div>
                         );
                     })}
+
+                    {/* Empty rows filler to maintain layout stability */}
+                    {visibleClients.length < ITEMS_PER_PAGE && Array.from({ length: ITEMS_PER_PAGE - visibleClients.length }).map((_, i) => (
+                        <div key={`empty-${i}`} className="h-[88px] border border-zinc-900/30 bg-zinc-950/30 rounded-sm"></div>
+                    ))}
                 </div>
             </div>
 
-            {/* CSS for the scroll animation */}
+            {/* CSS for the Flip Animation */}
             <style>{`
-                @keyframes scrollVertical {
-                    0% { transform: translateY(0); }
-                    100% { transform: translateY(-50%); }
+                .perspective-1000 {
+                    perspective: 1000px;
+                }
+                @keyframes flipIn {
+                    0% {
+                        opacity: 0;
+                        transform: rotateX(-90deg);
+                    }
+                    100% {
+                        opacity: 1;
+                        transform: rotateX(0);
+                    }
+                }
+                .animate-flip-in {
+                    animation: flipIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+                    transform-origin: top;
+                    backface-visibility: hidden;
                 }
             `}</style>
 
-            {/* Footer / Ticker */}
-            <div className="bg-yellow-500 text-black p-3 font-mono font-bold text-xl uppercase tracking-widest overflow-hidden whitespace-nowrap">
-                <div className="inline-block animate-marquee">
-                    *** AVALOON MONITORING SYSTEM *** UPDATING REAL-TIME DATA FROM INSTAGRAM *** KEEP YOUR POSTS UP TO DATE *** CONTACT SUPPORT FOR ASSISTANCE ***
-                    *** AVALOON MONITORING SYSTEM *** UPDATING REAL-TIME DATA FROM INSTAGRAM *** KEEP YOUR POSTS UP TO DATE *** CONTACT SUPPORT FOR ASSISTANCE ***
+            {/* Footer / Progress */}
+            <div className="bg-zinc-950 p-4 border-t border-zinc-800 flex justify-between items-center text-zinc-400 text-lg relative">
+                {/* Progress Bar */}
+                <div
+                    key={startIndex}
+                    className="absolute top-0 left-0 h-1 bg-yellow-500"
+                    style={{
+                        width: '100%',
+                        animation: `progress ${PAGE_DURATION}ms linear`
+                    }}
+                ></div>
+                <style>{`
+                    @keyframes progress {
+                        from { width: 0%; }
+                        to { width: 100%; }
+                    }
+                `}</style>
+
+                <div className="z-10 font-mono text-xl">
+                    PAGE <span className="text-white font-bold">{currentPage}</span> / <span className="text-white font-bold">{totalPages}</span>
+                </div>
+
+                <div className="z-10 flex items-center gap-6">
+                    <div className="font-mono text-base text-yellow-500 font-bold tracking-widest animate-pulse">
+                        LIVE DATA
+                    </div>
                 </div>
             </div>
-            <style>{`
-                @keyframes marquee {
-                    0% { transform: translateX(0); }
-                    100% { transform: translateX(-50%); }
-                }
-                .animate-marquee {
-                    animation: marquee 30s linear infinite;
-                }
-            `}</style>
         </div>
     );
 };
