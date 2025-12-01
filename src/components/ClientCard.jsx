@@ -18,8 +18,8 @@ const getTimeAgo = (dateString) => {
 
 const ClientCard = ({ client, onEdit, onDelete }) => {
     const { name, username, manager, days, followers, following, posts, engagement, latestPostDate } = client;
-    const isAlert = days > 2;
-    const isWarning = days >= 1 && days <= 2;
+    const isAlert = days >= 3;
+    const isWarning = days === 2;
 
     return (
         <div className={`glass-panel rounded-2xl p-5 relative group transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${isAlert ? 'animate-pulse-red border-red-500' : isWarning ? 'border-orange-500/50' : ''}`}>
@@ -64,8 +64,8 @@ const ClientCard = ({ client, onEdit, onDelete }) => {
             {/* Days without posting */}
             <div className="mb-4">
                 <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${isAlert ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
-                        isWarning ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' :
-                            'bg-green-500/10 text-green-400 border border-green-500/20'
+                    isWarning ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' :
+                        'bg-green-500/10 text-green-400 border border-green-500/20'
                     }`}>
                     <Clock size={14} className={isAlert ? 'text-red-500' : isWarning ? 'text-orange-500' : ''} />
                     {days === 0 ? getTimeAgo(latestPostDate) :

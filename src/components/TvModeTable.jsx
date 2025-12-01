@@ -80,8 +80,8 @@ const TvModeTable = ({ clients, onExit }) => {
             <div className="flex-1 p-6 overflow-hidden bg-zinc-950 perspective-1000">
                 <div className="flex flex-col gap-3">
                     {visibleClients.map((client, index) => {
-                        const isAlert = client.days > 2;
-                        const isWarning = client.days >= 1 && client.days <= 2;
+                        const isAlert = client.days >= 3;
+                        const isWarning = client.days === 2;
                         // Key includes startIndex to trigger re-render and animation on page change
                         const uniqueKey = `${client.id}-${startIndex}`;
 

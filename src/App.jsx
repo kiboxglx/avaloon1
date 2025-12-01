@@ -212,14 +212,14 @@ function App() {
   const filteredClients = clients.filter(client => {
     const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       client.username.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFilter = filterType === 'all' ? true : client.days > 2;
+    const matchesFilter = filterType === 'all' ? true : client.days >= 3;
 
     return matchesSearch && matchesFilter;
   }).sort((a, b) => {
     // Prioridade: Vermelho (> 2) > Laranja (>= 1) > Verde (0)
     const getPriority = (days) => {
-      if (days > 2) return 3;
-      if (days >= 1) return 2;
+      if (days >= 3) return 3;
+      if (days === 2) return 2;
       return 1;
     };
 
