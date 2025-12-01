@@ -9,24 +9,17 @@ import EmptyState from './components/EmptyState';
 
 import AvaloonLogo from './components/AvaloonLogo';
 
+import { initialClients } from './data/clients';
+
 function App() {
   const [clients, setClients] = useState(() => {
     const savedClients = localStorage.getItem('avaloon_clients');
     if (savedClients) {
+      // Check if we need to force migration (optional logic could go here)
+      // For now, we return saved clients, but we will provide a way to reset
       return JSON.parse(savedClients);
     }
-    return [
-      { id: 1, name: 'Quintal Mineiro', username: '@quintalmineiromoc', manager: 'João Silva', days: 14, followers: '12.5k', following: '1.2k', posts: '450', engagement: '6.43%', latestPostDate: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString() },
-      { id: 2, name: 'Tech Solutions', username: '@techsolutions', manager: 'Maria Oliveira', days: 1, followers: '5.2k', following: '300', posts: '120', engagement: '3.2%', latestPostDate: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString() },
-      { id: 3, name: 'Burger King', username: '@burgerkingbr', manager: 'Carlos Souza', days: 9, followers: '1.2M', following: '50', posts: '3.5k', engagement: '8.1%', latestPostDate: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000).toISOString() },
-      { id: 4, name: 'Padaria Central', username: '@padariacentral', manager: 'Ana Costa', days: 2, followers: '3.1k', following: '500', posts: '210', engagement: '4.5%', latestPostDate: new Date(Date.now() - 49 * 60 * 60 * 1000).toISOString() },
-      { id: 5, name: 'Academia Fit', username: '@academiafit', manager: 'Pedro Santos', days: 5, followers: '8.9k', following: '800', posts: '600', engagement: '5.1%', latestPostDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString() },
-      { id: 6, name: 'Loja de Roupas', username: '@lojaroupas', manager: 'Sofia Pereira', days: 0, followers: '15.2k', following: '1.5k', posts: '900', engagement: '2.8%', latestPostDate: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() }, // 2 hours ago
-      { id: 7, name: 'Clínica Saúde', username: '@clinicasaude', manager: 'Lucas Fernandes', days: 12, followers: '4.5k', following: '200', posts: '150', engagement: '3.9%', latestPostDate: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString() },
-      { id: 8, name: 'Bar do Zé', username: '@bardoze', manager: 'Mariana Lima', days: 3, followers: '2.1k', following: '100', posts: '80', engagement: '7.2%', latestPostDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString() },
-      { id: 9, name: 'Pet Shop', username: '@petshopfeliz', manager: 'Guilherme Rocha', days: 1, followers: '6.7k', following: '400', posts: '320', engagement: '5.5%', latestPostDate: new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString() },
-      { id: 10, name: 'Escola de Inglês', username: '@escolalinguas', manager: 'Isabela Gomes', days: 7, followers: '3.8k', following: '150', posts: '200', engagement: '4.1%', latestPostDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString() },
-    ];
+    return initialClients;
   });
 
   useEffect(() => {

@@ -7,7 +7,7 @@ const ACTOR_ID = 'apify~instagram-profile-scraper';
 
 export const fetchInstagramData = async (usernames) => {
     console.log('Fetching data for:', usernames);
-    console.log('Using Token:', APIFY_TOKEN ? 'Token found' : 'Token MISSING');
+    console.log('Using Token:', APIFY_TOKEN ? `Present (${APIFY_TOKEN.substring(0, 5)}...)` : 'MISSING');
 
     // 1. Start the Actor Run
     try {
