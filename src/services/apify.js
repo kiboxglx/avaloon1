@@ -12,12 +12,20 @@ export const fetchInstagramData = async (usernames) => {
     // 1. Start the Actor Run
     try {
         console.log(`Iniciando execução do Actor ${ACTOR_ID} via proxy...`);
+
+        const headers = {
+            'Content-Type': 'application/json',
+        };
+
+        if (APIFY_TOKEN) {
+            headers['Authorization'] = `Bearer ${APIFY_TOKEN}`;
+        }
+
         // Use the proxy path '/api/apify' instead of 'https://api.apify.com/v2'
-        const runResponse = await fetch(`/api/apify/acts/${ACTOR_ID}/runs?token=${APIFY_TOKEN}`, {
+        // Removed token from URL, using Header instead
+        const runResponse = await fetch(`/api/apify/acts/${ACTOR_ID}/runs`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: headers,
             body: JSON.stringify({
                 usernames: usernames,
                 resultsLimit: 1,
@@ -44,7 +52,10 @@ export const fetchInstagramData = async (usernames) => {
             console.log(`Verificando status (Tentativa ${attempts})...`);
             await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
 
-            const statusResponse = await fetch(`/api/apify/acts/${ACTOR_ID}/runs/${runId}?token=${APIFY_TOKEN}`);
+            const statusResponse = await fetch(`/api/apify/acts/${ACTOR_ID}/runs/${runId}`, {
+                headers: headers
+            });
+
             if (!statusResponse.ok) {
                 console.error('Erro ao verificar status:', await statusResponse.text());
                 continue;
@@ -67,7 +78,9 @@ export const fetchInstagramData = async (usernames) => {
         // 3. Fetch Results
         console.log('Buscando resultados do dataset:', datasetId);
         // Endpoint CORRETO: /datasets/{datasetId}/items
-        const datasetResponse = await fetch(`/api/apify/datasets/${datasetId}/items?token=${APIFY_TOKEN}`);
+        const datasetResponse = await fetch(`/api/apify/datasets/${datasetId}/items`, {
+            headers: headers
+        });
         if (!datasetResponse.ok) {
             console.error('Erro ao buscar dataset:', await datasetResponse.text());
             throw new Error('Failed to fetch dataset items');
