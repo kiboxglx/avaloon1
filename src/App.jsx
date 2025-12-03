@@ -7,6 +7,7 @@ import { fetchInstagramData } from './services/apify';
 import StatsOverview from './components/StatsOverview';
 import EmptyState from './components/EmptyState';
 import AvaloonLogo from './components/AvaloonLogo';
+import MobileNav from './components/MobileNav';
 import { initialClients } from './data/clients';
 import { supabase } from './services/supabase';
 
@@ -234,14 +235,14 @@ function App() {
   });
 
   return (
-    <div className="min-h-screen p-4 md:p-8 font-sans selection:bg-primary/30 selection:text-primary-foreground">
+    <div className="min-h-screen p-4 md:p-8 pb-24 md:pb-8 font-sans selection:bg-primary/30 selection:text-primary-foreground">
       {/* Header */}
       <header className="flex flex-col md:flex-row justify-between items-center mb-10 gap-6">
         <div className="transform hover:scale-105 transition-transform duration-300">
           <AvaloonLogo className="h-20 md:h-24" />
         </div>
 
-        <div className="flex flex-wrap justify-center gap-3 md:gap-4 w-full md:w-auto">
+        <div className="hidden md:flex flex-wrap justify-center gap-3 md:gap-4 w-full md:w-auto">
           <button
             onClick={() => setIsTvMode(!isTvMode)}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl transition-all duration-300 font-medium border ${isTvMode ? 'bg-secondary border-secondary text-white shadow-[0_0_20px_rgba(255,87,34,0.4)]' : 'glass-button text-zinc-300 border-white/10 hover:border-secondary/50'} `}
@@ -336,6 +337,18 @@ function App() {
         onClose={() => setIsModalOpen(false)}
         onSave={handleSaveProfile}
         initialData={editingClient}
+      />
+
+      <MobileNav
+        isTvMode={isTvMode}
+        setIsTvMode={setIsTvMode}
+        onRefresh={() => handleRefresh(clients)}
+        isRefreshing={isRefreshing}
+        onAddClick={() => {
+          setEditingClient(null);
+          setIsModalOpen(true);
+        }}
+        onHomeClick={() => setIsTvMode(false)}
       />
     </div>
   );

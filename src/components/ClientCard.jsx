@@ -24,7 +24,7 @@ const ClientCard = ({ client, onEdit, onDelete }) => {
     return (
         <div className={`glass-panel rounded-2xl p-5 relative group transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${isAlert ? 'animate-pulse-red border-red-500' : isWarning ? 'border-orange-500/50' : ''}`}>
             {/* Actions */}
-            <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+            <div className="absolute top-4 right-4 flex gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity z-10">
                 <button onClick={onEdit} className="p-2 rounded-lg bg-zinc-800/80 text-zinc-400 hover:text-white hover:bg-secondary transition-colors">
                     <Edit size={14} />
                 </button>
