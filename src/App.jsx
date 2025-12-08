@@ -20,6 +20,10 @@ function App() {
   const [isTvMode, setIsTvMode] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [editingClient, setEditingClient] = useState(null);
+  const [selectedManager, setSelectedManager] = useState('all');
+
+  // Extrair gestores únicos para o filtro
+  const uniqueManagers = [...new Set(clients.map(client => client.manager).filter(Boolean))].sort();
 
   // Fetch clients from Supabase on load
   useEffect(() => {
@@ -214,8 +218,9 @@ function App() {
     const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       client.username.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesFilter = filterType === 'all' ? true : client.days >= 3;
+    const matchesManager = selectedManager === 'all' ? true : client.manager === selectedManager;
 
-    return matchesSearch && matchesFilter;
+    return matchesSearch && matchesFilter && matchesManager;
   }).sort((a, b) => {
     // Prioridade: Vermelho (> 2) > Laranja (>= 1) > Verde (0)
     const getPriority = (days) => {
@@ -289,6 +294,23 @@ function App() {
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-transparent text-white pl-12 pr-4 py-3 rounded-xl focus:outline-none placeholder-zinc-600 input-glow transition-all"
           />
+        </div>
+
+        {/* Manager Filter */}
+        <div className="w-full md:w-64">
+          <select
+            value={selectedManager}
+            onChange={(e) => setSelectedManager(e.target.value)}
+            className="w-full bg-black/20 text-white px-4 py-3 rounded-xl border-none focus:outline-none focus:ring-2 focus:ring-secondary/50 appearance-none cursor-pointer hover:bg-black/30 transition-colors"
+            style={{ backgroundImage: 'none' }} // Remove default arrow if needed, but standard select is fine for MVP
+          >
+            <option value="all" className="bg-zinc-900 text-zinc-300">Todos Gestores</option>
+            {uniqueManagers.map(manager => (
+              <option key={manager} value={manager} className="bg-zinc-900 text-white">
+                {manager}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="flex gap-2 w-full md:w-auto p-1 bg-black/20 rounded-xl">

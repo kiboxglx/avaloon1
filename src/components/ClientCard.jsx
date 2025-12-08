@@ -37,9 +37,9 @@ const ClientCard = ({ client, onEdit, onDelete }) => {
             <div className="mb-6">
                 <div className="flex justify-between items-start">
                     <div>
-                        <h3 className="text-xl font-bold text-white leading-tight mb-1">{name}</h3>
-                        <a href={`https://instagram.com/${username.replace('@', '')}`} target="_blank" rel="noreferrer" className="text-sm text-zinc-400 hover:text-secondary flex items-center gap-1 transition-colors">
-                            {username} <ExternalLink size={12} />
+                        <h3 className="text-xl font-bold text-white leading-tight mb-1 truncate pr-2">{name}</h3>
+                        <a href={`https://instagram.com/${username.replace('@', '')}`} target="_blank" rel="noreferrer" className="text-sm text-zinc-400 hover:text-secondary flex items-center gap-1 transition-colors truncate block max-w-[200px]">
+                            {username} <ExternalLink size={12} className="inline-block flex-shrink-0" />
                         </a>
                     </div>
                     {isAlert && (

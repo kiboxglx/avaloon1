@@ -19,7 +19,7 @@ const StatsOverview = ({ clients }) => {
     const onTrackClients = totalClients - alertClients;
 
     return (
-        <div className="flex flex-wrap gap-4 mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
             <StatCard
                 title="Total de Contas"
                 value={totalClients}
