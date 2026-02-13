@@ -9,10 +9,21 @@ import EmptyState from './components/EmptyState';
 import AvaloonLogo from './components/AvaloonLogo';
 import MobileNav from './components/MobileNav';
 import { initialClients } from './data/clients';
+import Login from './components/Login';
 import { supabase } from './services/supabase';
+
+// Lista de e-mails que são administradores (Gerentes)
+// Você pode adicionar mais e-mails aqui ou usar user_metadata.role = 'admin' no Supabase
+const ADMIN_EMAILS = [
+  'admin@avaloon.com',
+  'gerente@avaloon.com',
+  'dono@avaloon.com'
+];
 
 function App() {
   const [clients, setClients] = useState([]);
+  const [session, setSession] = useState(null); // Auth State
+  const [authLoading, setAuthLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all'); // all, alert, onTrack
@@ -22,13 +33,41 @@ function App() {
   const [editingClient, setEditingClient] = useState(null);
   const [selectedManager, setSelectedManager] = useState('all');
 
+  // Check if current user is admin
+  const isAdmin = session?.user && (
+    ADMIN_EMAILS.includes(session.user.email) ||
+    session.user.user_metadata?.role === 'admin'
+  );
+
   // Extrair gestores únicos para o filtro
   const uniqueManagers = [...new Set(clients.map(client => client.manager).filter(Boolean))].sort();
 
-  // Fetch clients from Supabase on load
+  // Handle Auth Session
   useEffect(() => {
-    fetchClients();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setAuthLoading(false);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
+
+  // Fetch clients from Supabase on load (only if logged in)
+  useEffect(() => {
+    if (session) {
+      fetchClients();
+    }
+  }, [session]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
 
   const fetchClients = async () => {
     setIsLoading(true);
@@ -119,6 +158,11 @@ function App() {
   };
 
   const handleSaveProfile = async (formData) => {
+    if (!isAdmin) {
+      alert('Você não tem permissão para realizar esta ação.');
+      return;
+    }
+
     if (editingClient) {
       // Update existing
       try {
@@ -149,6 +193,11 @@ function App() {
   };
 
   const handleDeleteClient = async (id) => {
+    if (!isAdmin) {
+      alert('Você não tem permissão para excluir clientes.');
+      return;
+    }
+
     if (window.confirm('Tem certeza que deseja excluir este cliente?')) {
       try {
         const { error } = await supabase.from('clients').delete().eq('id', id);
@@ -239,6 +288,14 @@ function App() {
     return b.days - a.days; // Mais dias de atraso primeiro
   });
 
+  if (authLoading) {
+    return <div className="min-h-screen bg-black flex items-center justify-center text-white">Carregando...</div>;
+  }
+
+  if (!session) {
+    return <Login />;
+  }
+
   return (
     <div className="min-h-screen p-4 md:p-8 pb-24 md:pb-8 font-sans selection:bg-primary/30 selection:text-primary-foreground">
       {/* Header */}
@@ -264,17 +321,22 @@ function App() {
             <span className="hidden sm:inline">{isRefreshing ? 'Atualizando...' : 'Atualizar'}</span>
           </button>
 
-          <button
-            onClick={() => {
-              setEditingClient(null);
-              setIsModalOpen(true);
-            }}
-            className="flex items-center gap-2 px-5 py-2.5 bg-secondary rounded-xl hover:shadow-[0_0_25px_rgba(255,87,34,0.5)] hover:scale-105 transition-all duration-300 font-bold text-white border border-white/10"
-          >
-            <Plus size={20} strokeWidth={3} /> <span className="hidden sm:inline">Adicionar</span>
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => {
+                setEditingClient(null);
+                setIsModalOpen(true);
+              }}
+              className="flex items-center gap-2 px-5 py-2.5 bg-secondary rounded-xl hover:shadow-[0_0_25px_rgba(255,87,34,0.5)] hover:scale-105 transition-all duration-300 font-bold text-white border border-white/10"
+            >
+              <Plus size={20} strokeWidth={3} /> <span className="hidden sm:inline">Adicionar</span>
+            </button>
+          )}
 
-          <button className="flex items-center gap-2 px-5 py-2.5 rounded-xl transition-all duration-300 font-medium border glass-button text-zinc-400 hover:text-red-400 hover:border-red-500/30">
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl transition-all duration-300 font-medium border glass-button text-zinc-400 hover:text-red-400 hover:border-red-500/30"
+          >
             <LogOut size={18} />
           </button>
         </div>
@@ -342,6 +404,7 @@ function App() {
                   client={client}
                   onEdit={() => handleEditClient(client)}
                   onDelete={() => handleDeleteClient(client.id)}
+                  isAdmin={isAdmin} // Pass admin role
                 />
               ))}
             </div>
@@ -371,6 +434,7 @@ function App() {
           setIsModalOpen(true);
         }}
         onHomeClick={() => setIsTvMode(false)}
+        isAdmin={isAdmin}
       />
     </div>
   );

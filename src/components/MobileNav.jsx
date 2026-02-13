@@ -7,7 +7,8 @@ const MobileNav = ({
     onRefresh,
     isRefreshing,
     onAddClick,
-    onHomeClick
+    onHomeClick,
+    isAdmin
 }) => {
     return (
         <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden">
@@ -29,14 +30,16 @@ const MobileNav = ({
                         <span className="text-[10px] font-medium">TV</span>
                     </button>
 
-                    <div className="relative -top-6">
-                        <button
-                            onClick={onAddClick}
-                            className="bg-secondary text-white p-4 rounded-full shadow-[0_0_20px_rgba(255,87,34,0.4)] hover:scale-105 transition-transform border-4 border-[#050505]"
-                        >
-                            <Plus size={28} strokeWidth={3} />
-                        </button>
-                    </div>
+                    {isAdmin && (
+                        <div className="relative -top-6">
+                            <button
+                                onClick={onAddClick}
+                                className="bg-secondary text-white p-4 rounded-full shadow-[0_0_20px_rgba(255,87,34,0.4)] hover:scale-105 transition-transform border-4 border-[#050505]"
+                            >
+                                <Plus size={28} strokeWidth={3} />
+                            </button>
+                        </div>
+                    )}
 
                     <button
                         onClick={onRefresh}
