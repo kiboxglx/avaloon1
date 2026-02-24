@@ -83,18 +83,6 @@ function App() {
       if (error) throw error;
 
       if (data && data.length > 0) {
-        // Check for missing initial clients and add them
-        const existingUsernames = new Set(data.map(c => c.username));
-        const missingClients = initialClients.filter(ic => !existingUsernames.has(ic.username));
-
-        if (missingClients.length > 0) {
-          console.log(`Found ${missingClients.length} new clients in code to add to DB...`);
-          await addNewClients(missingClients);
-          // Re-fetch to update UI
-          fetchClients();
-          return;
-        }
-
         // Map Supabase columns to app state (snake_case to camelCase if needed, but we kept it simple)
         const formattedData = data.map(client => ({
           ...client,
@@ -112,22 +100,7 @@ function App() {
     }
   };
 
-  const addNewClients = async (clients) => {
-    const clientsToInsert = clients.map(c => ({
-      name: c.name,
-      username: c.username,
-      manager: c.manager,
-      days: c.days,
-      followers: c.followers,
-      following: c.following,
-      posts: c.posts,
-      engagement: c.engagement,
-      latest_post_date: c.latestPostDate
-    }));
 
-    const { error } = await supabase.from('clients').insert(clientsToInsert);
-    if (error) console.error('Error adding new clients:', error);
-  };
 
   const seedInitialData = async () => {
     console.log('Seeding initial data to Supabase...');
