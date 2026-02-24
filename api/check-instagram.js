@@ -34,6 +34,8 @@ export default async function handler(req, res) {
         const results = await fetchInstagramData(accounts);
 
         const alertsToNotifyDirector = [];
+        const alertsToNotifyCEO = []; // Alertas graves (> 5 dias)
+        const alertsByManager = {}; // Alertas agrupados por gerente
         const alertsSummary = [];
 
         for (const client of clients) {
@@ -45,50 +47,85 @@ export default async function handler(req, res) {
             if (data.days >= threshold) {
                 const lastDate = data.latestPostDate ? new Date(data.latestPostDate).toLocaleDateString('pt-BR') : 'Desconhecida';
 
-                // Mensagem para o Gerente
-                const managerMessage = `🚨 *Alerta de Postagem - Avaloon*\n\nOlá *${client.manager || 'Gerente'}*,\n\nO perfil *${client.name}* (@${cleanUsername}) sob sua responsabilidade está há *${data.days}* dias sem postar!\n\n📅 Última postagem: ${lastDate}\n🔗 https://instagram.com/${cleanUsername}`;
-
                 // Adicionar à lista do Diretor
-                alertsToNotifyDirector.push({
+                const alertInfo = {
                     name: client.name,
                     username: cleanUsername,
                     days: data.days,
                     manager: client.manager || 'Não atribuído',
                     lastPost: lastDate
-                });
+                };
 
-                // 1. Envia para o Gerente (se tiver número cadastrado)
+                alertsToNotifyDirector.push(alertInfo);
+
+                // Se tiver mais de 5 dias, vai para a lista do CEO
+                if (data.days >= 5) {
+                    alertsToNotifyCEO.push(alertInfo);
+                }
+
+                // Agrupar para envio individual para Gerente
                 if (client.manager_phone) {
-                    const cleanPhone = client.manager_phone.replace(/\s+/g, '').replace('+', '').replace(/[()-\s]/g, '');
-                    console.log(`Enviando alerta individual para o Gerente ${client.manager} (${cleanPhone})...`);
-                    try {
-                        await sendWhatsAppAlert(cleanPhone, managerMessage);
-                    } catch (err) {
-                        console.error(`Falha ao enviar para gerente ${client.manager}:`, err.message);
+                    const cleanPhone = client.manager_phone.replace(/[()-\s+]/g, '');
+                    if (!alertsByManager[cleanPhone]) {
+                        alertsByManager[cleanPhone] = {
+                            name: client.manager || 'Gerente',
+                            alerts: []
+                        };
                     }
+                    alertsByManager[cleanPhone].alerts.push(alertInfo);
                 }
 
                 alertsSummary.push({ client: client.name, manager: client.manager });
             }
         }
 
-        // 2. Envia RESUMO para o Diretor (se houver alertas)
+        // 1. Enviar mensagens para os GERENTES (Resumo por gerente)
+        for (const [phone, group] of Object.entries(alertsByManager)) {
+            let managerMsg = `🚨 *Alertas de Gestão - Avaloon*\n\nOlá *${group.name}*,\n\nOs seguintes perfis sob sua responsabilidade precisam de postagem:\n\n`;
+            group.alerts.forEach((a, i) => {
+                managerMsg += `${i + 1}. *${a.name}* (@${a.username})\n   ⏳ ${a.days} dias sem postar\n   📅 Última: ${a.lastPost}\n\n`;
+            });
+            managerMsg += `_Por favor, verifique com os clientes._`;
+
+            try {
+                console.log(`Enviando resumo para Gerente ${group.name} (${phone})...`);
+                await sendWhatsAppAlert(phone, managerMsg);
+            } catch (err) {
+                console.error(`Erro ao enviar para gerente ${group.name}:`, err.message);
+            }
+        }
+
+        // 2. Envia RESUMO para o Diretor
         if (alertsToNotifyDirector.length > 0) {
-            console.log(`Enviando resumo de ${alertsToNotifyDirector.length} alertas para o Diretor...`);
-
-            let summaryMessage = `📊 *Resumo de Alertas - Avaloon*\n\nExistem *${alertsToNotifyDirector.length}* perfis precisando de atenção:\n\n`;
-
+            console.log(`Enviando resumo para o Diretor...`);
+            let directorMsg = `📊 *Resumo Geral - Avaloon*\n\nExistem *${alertsToNotifyDirector.length}* perfis precisando de atenção:\n\n`;
             alertsToNotifyDirector.forEach((alert, index) => {
-                summaryMessage += `${index + 1}. *${alert.name}* (@${alert.username})\n   ⏳ ${alert.days} dias sem postar\n   👤 Gerente: ${alert.manager}\n   🔗 https://instagram.com/${alert.username}\n\n`;
+                directorMsg += `${index + 1}. *${alert.name}* (@${alert.username})\n   ⏳ ${alert.days} dias | 👤 ${alert.manager}\n\n`;
             });
 
-            summaryMessage += `_Total de alertas hoje: ${alertsToNotifyDirector.length}_`;
-
-            const cleanDirectorPhone = directorPhone.replace(/\s+/g, '').replace('+', '').replace(/[()-\s]/g, '');
+            const cleanDirectorPhone = directorPhone.replace(/[()-\s+]/g, '');
             try {
-                await sendWhatsAppAlert(cleanDirectorPhone, summaryMessage);
+                await sendWhatsAppAlert(cleanDirectorPhone, directorMsg);
             } catch (err) {
-                console.error(`Falha ao enviar resumo para Diretor:`, err.message);
+                console.error(`Erro ao enviar para Diretor:`, err.message);
+            }
+        }
+
+        // 3. Envia RESUMO CRÍTICO para o CEO (> 5 dias)
+        const ceoPhone = process.env.VITE_CEO_WHATSAPP_NUMBER;
+        if (ceoPhone && alertsToNotifyCEO.length > 0) {
+            console.log(`Enviando resumo crítico para o CEO...`);
+            let ceoMsg = `🔥 *ALERTA CRÍTICO (CEO) - Avaloon*\n\nOs seguintes perfis estão há *mais de 5 dias* sem postar:\n\n`;
+            alertsToNotifyCEO.forEach((alert, index) => {
+                ceoMsg += `${index + 1}. *${alert.name}* (@${alert.username})\n   🚫 *${alert.days} dias* | 👤 Gerente: ${alert.manager}\n\n`;
+            });
+            ceoMsg += `_Ação imediata recomendada._`;
+
+            const cleanCeoPhone = ceoPhone.replace(/[()-\s+]/g, '');
+            try {
+                await sendWhatsAppAlert(cleanCeoPhone, ceoMsg);
+            } catch (err) {
+                console.error(`Erro ao enviar para CEO:`, err.message);
             }
         }
 
