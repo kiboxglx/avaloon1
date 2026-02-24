@@ -33,6 +33,7 @@ export default async function handler(req, res) {
 
         const results = await fetchInstagramData(accounts);
 
+        const alertsToNotifyDirector = [];
         const alertsSummary = [];
 
         for (const client of clients) {
@@ -47,28 +48,54 @@ export default async function handler(req, res) {
                 // Mensagem para o Gerente
                 const managerMessage = `🚨 *Alerta de Postagem - Avaloon*\n\nOlá *${client.manager || 'Gerente'}*,\n\nO perfil *${client.name}* (@${cleanUsername}) sob sua responsabilidade está há *${data.days}* dias sem postar!\n\n📅 Última postagem: ${lastDate}\n🔗 https://instagram.com/${cleanUsername}`;
 
-                // Mensagem para o Diretor (inclui quem é o gerente)
-                const directorMessage = `🚨 *Alerta Geral - Avaloon*\n\nO perfil *${client.name}* (@${cleanUsername}) está há *${data.days}* dias sem postar.\n\n👤 Gerente: ${client.manager || 'Não atribuído'}\n📅 Última postagem: ${lastDate}\n🔗 https://instagram.com/${cleanUsername}`;
+                // Adicionar à lista do Diretor
+                alertsToNotifyDirector.push({
+                    name: client.name,
+                    username: cleanUsername,
+                    days: data.days,
+                    manager: client.manager || 'Não atribuído',
+                    lastPost: lastDate
+                });
 
                 // 1. Envia para o Gerente (se tiver número cadastrado)
                 if (client.manager_phone) {
-                    const cleanPhone = client.manager_phone.replace(/\s+/g, '').replace('+', '');
-                    console.log(`Enviando alerta para o Gerente ${client.manager} (${cleanPhone})...`);
-                    await sendWhatsAppAlert(cleanPhone, managerMessage);
+                    const cleanPhone = client.manager_phone.replace(/\s+/g, '').replace('+', '').replace(/[()-\s]/g, '');
+                    console.log(`Enviando alerta individual para o Gerente ${client.manager} (${cleanPhone})...`);
+                    try {
+                        await sendWhatsAppAlert(cleanPhone, managerMessage);
+                    } catch (err) {
+                        console.error(`Falha ao enviar para gerente ${client.manager}:`, err.message);
+                    }
                 }
 
-                // 2. Envia sempre para o Diretor
-                console.log(`Enviando cópia para o Diretor...`);
-                const cleanDirectorPhone = directorPhone.replace(/\s+/g, '').replace('+', '');
-                await sendWhatsAppAlert(cleanDirectorPhone, directorMessage);
-
                 alertsSummary.push({ client: client.name, manager: client.manager });
+            }
+        }
+
+        // 2. Envia RESUMO para o Diretor (se houver alertas)
+        if (alertsToNotifyDirector.length > 0) {
+            console.log(`Enviando resumo de ${alertsToNotifyDirector.length} alertas para o Diretor...`);
+
+            let summaryMessage = `📊 *Resumo de Alertas - Avaloon*\n\nExistem *${alertsToNotifyDirector.length}* perfis precisando de atenção:\n\n`;
+
+            alertsToNotifyDirector.forEach((alert, index) => {
+                summaryMessage += `${index + 1}. *${alert.name}* (@${alert.username})\n   ⏳ ${alert.days} dias sem postar\n   👤 Gerente: ${alert.manager}\n   🔗 https://instagram.com/${alert.username}\n\n`;
+            });
+
+            summaryMessage += `_Total de alertas hoje: ${alertsToNotifyDirector.length}_`;
+
+            const cleanDirectorPhone = directorPhone.replace(/\s+/g, '').replace('+', '').replace(/[()-\s]/g, '');
+            try {
+                await sendWhatsAppAlert(cleanDirectorPhone, summaryMessage);
+            } catch (err) {
+                console.error(`Falha ao enviar resumo para Diretor:`, err.message);
             }
         }
 
         return res.status(200).json({
             success: true,
             alerts_sent_count: alertsSummary.length,
+            alerts_sent: alertsSummary.map(a => a.client),
             details: alertsSummary,
             timestamp: new Date().toISOString()
         });
