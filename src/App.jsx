@@ -32,6 +32,7 @@ function App() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isTvMode, setIsTvMode] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [editingClient, setEditingClient] = useState(null);
   const [selectedManager, setSelectedManager] = useState('all');
   const [isTestingAlert, setIsTestingAlert] = useState(false);
 
