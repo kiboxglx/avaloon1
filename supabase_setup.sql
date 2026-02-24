@@ -6,6 +6,7 @@ create table clients (
   name text not null,
   username text not null,
   manager text,
+  manager_phone text,
   days integer default 0,
   followers text,
   following text,

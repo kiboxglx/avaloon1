@@ -5,6 +5,7 @@ const ProfileModal = ({ isOpen, onClose, onSave, initialData = null }) => {
     const [formData, setFormData] = useState({
         name: '',
         manager: '',
+        manager_phone: '',
         username: ''
     });
 
@@ -13,10 +14,11 @@ const ProfileModal = ({ isOpen, onClose, onSave, initialData = null }) => {
             setFormData({
                 name: initialData.name || '',
                 manager: initialData.manager || '',
+                manager_phone: initialData.manager_phone || '',
                 username: initialData.username || ''
             });
         } else {
-            setFormData({ name: '', manager: '', username: '' });
+            setFormData({ name: '', manager: '', manager_phone: '', username: '' });
         }
     }, [initialData, isOpen]);
 
@@ -65,6 +67,18 @@ const ProfileModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                             className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary transition-colors placeholder-slate-600 input-glow"
                             value={formData.manager}
                             onChange={(e) => setFormData({ ...formData, manager: e.target.value })}
+                            onKeyDown={(e) => e.key === 'Enter' && handleSubmit(e)}
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-slate-400 mb-1">WhatsApp do Gerente</label>
+                        <input
+                            type="text"
+                            placeholder="Ex: +5538999999999"
+                            className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary transition-colors placeholder-slate-600 input-glow"
+                            value={formData.manager_phone}
+                            onChange={(e) => setFormData({ ...formData, manager_phone: e.target.value })}
                             onKeyDown={(e) => e.key === 'Enter' && handleSubmit(e)}
                         />
                     </div>

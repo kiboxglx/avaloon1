@@ -159,6 +159,7 @@ function App() {
         name: newClient.name,
         username: newClient.username,
         manager: newClient.manager,
+        manager_phone: newClient.manager_phone,
         days: 0,
         followers: '0',
         following: '0',
@@ -203,7 +204,8 @@ function App() {
           .update({
             name: formData.name,
             username: formData.username,
-            manager: formData.manager
+            manager: formData.manager,
+            manager_phone: formData.manager_phone
           })
           .eq('id', editingClient.id);
 
