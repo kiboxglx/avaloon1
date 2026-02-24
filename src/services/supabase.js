@@ -1,7 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Substitua pelas suas chaves reais
+const getEnv = (key) => {
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
+        return import.meta.env[key];
+    }
+    return process.env[key];
+};
+
 const supabaseUrl = 'https://zgylxiuydjywidzyjgqx.supabase.co';
-const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
+const supabaseKey = getEnv('VITE_SUPABASE_KEY');
 
 export const supabase = createClient(supabaseUrl, supabaseKey);

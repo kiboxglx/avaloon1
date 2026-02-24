@@ -5,8 +5,18 @@
             "destination": "https://api.apify.com/v2/:match*"
         },
         {
+            "source": "/api/check-instagram",
+            "destination": "/api/check-instagram.js"
+        },
+        {
             "source": "/(.*)",
             "destination": "/index.html"
+        }
+    ],
+    "crons": [
+        {
+            "path": "/api/check-instagram",
+            "schedule": "0 9 * * *"
         }
     ]
 }

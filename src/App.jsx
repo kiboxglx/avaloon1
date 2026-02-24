@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Monitor, RefreshCw, Plus, LogOut } from 'lucide-react';
+import { Search, Monitor, RefreshCw, Plus, LogOut, Upload, MessageSquare } from 'lucide-react';
 import ClientCard from './components/ClientCard';
 import ProfileModal from './components/ProfileModal';
+import ImportClientsModal from './components/ImportClientsModal';
 import TvModeTable from './components/TvModeTable';
 import { fetchInstagramData } from './services/apify';
 import StatsOverview from './components/StatsOverview';
@@ -28,10 +28,11 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all'); // all, alert, onTrack
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isTvMode, setIsTvMode] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [editingClient, setEditingClient] = useState(null);
   const [selectedManager, setSelectedManager] = useState('all');
+  const [isTestingAlert, setIsTestingAlert] = useState(false);
 
   // Check if current user is admin
   const isAdmin = session?.user && (
@@ -80,6 +81,18 @@ function App() {
       if (error) throw error;
 
       if (data && data.length > 0) {
+        // Check for missing initial clients and add them
+        const existingUsernames = new Set(data.map(c => c.username));
+        const missingClients = initialClients.filter(ic => !existingUsernames.has(ic.username));
+
+        if (missingClients.length > 0) {
+          console.log(`Found ${missingClients.length} new clients in code to add to DB...`);
+          await addNewClients(missingClients);
+          // Re-fetch to update UI
+          fetchClients();
+          return;
+        }
+
         // Map Supabase columns to app state (snake_case to camelCase if needed, but we kept it simple)
         const formattedData = data.map(client => ({
           ...client,
@@ -95,6 +108,23 @@ function App() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const addNewClients = async (clients) => {
+    const clientsToInsert = clients.map(c => ({
+      name: c.name,
+      username: c.username,
+      manager: c.manager,
+      days: c.days,
+      followers: c.followers,
+      following: c.following,
+      posts: c.posts,
+      engagement: c.engagement,
+      latest_post_date: c.latestPostDate
+    }));
+
+    const { error } = await supabase.from('clients').insert(clientsToInsert);
+    if (error) console.error('Error adding new clients:', error);
   };
 
   const seedInitialData = async () => {
@@ -253,6 +283,36 @@ function App() {
     }
   }, [clients]); // Dependency on clients to ensure it uses the latest list
 
+  const handleTestAlert = async () => {
+    if (!isAdmin) return;
+
+    setIsTestingAlert(true);
+    try {
+      // Chamada manual para a API Route de alertas
+      const response = await fetch('/api/check-instagram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        if (data.alerts_sent.length > 0) {
+          alert(`✅ Sucesso! Alertas de WhatsApp enviados para: ${data.alerts_sent.join(', ')}`);
+        } else {
+          alert('ℹ️ Verificação concluída. Nenhuma conta atingiu o limite de dias para alerta hoje.');
+        }
+      } else {
+        throw new Error(data.error || 'Erro desconhecido na API');
+      }
+    } catch (error) {
+      console.error('Erro ao testar alertas:', error);
+      alert(`❌ Falha ao processar alertas: ${error.message}`);
+    } finally {
+      setIsTestingAlert(false);
+    }
+  };
+
   // Atualização automática a cada 6 horas
   useEffect(() => {
     const SIX_HOURS = 6 * 60 * 60 * 1000;
@@ -322,15 +382,35 @@ function App() {
           </button>
 
           {isAdmin && (
-            <button
-              onClick={() => {
-                setEditingClient(null);
-                setIsModalOpen(true);
-              }}
-              className="flex items-center gap-2 px-5 py-2.5 bg-secondary rounded-xl hover:shadow-[0_0_25px_rgba(255,87,34,0.5)] hover:scale-105 transition-all duration-300 font-bold text-white border border-white/10"
-            >
-              <Plus size={20} strokeWidth={3} /> <span className="hidden sm:inline">Adicionar</span>
-            </button>
+            <>
+              <button
+                onClick={() => setIsImportModalOpen(true)}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl transition-all duration-300 font-medium border glass-button text-zinc-300 border-white/10 hover:border-secondary/50 hover:text-white"
+                title="Importar Clientes"
+              >
+                <Upload size={20} /> <span className="hidden lg:inline">Importar</span>
+              </button>
+
+              <button
+                onClick={handleTestAlert}
+                disabled={isTestingAlert}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl transition-all duration-300 font-medium border glass-button text-zinc-300 border-white/10 hover:border-green-500/50 hover:text-white ${isTestingAlert ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title="Testar Envio de WhatsApp"
+              >
+                <MessageSquare size={18} className={isTestingAlert ? 'animate-pulse text-green-500' : ''} />
+                <span className="hidden lg:inline">{isTestingAlert ? 'Verificando...' : 'Testar Alertas'}</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setEditingClient(null);
+                  setIsModalOpen(true);
+                }}
+                className="flex items-center gap-2 px-5 py-2.5 bg-secondary rounded-xl hover:shadow-[0_0_25px_rgba(255,87,34,0.5)] hover:scale-105 transition-all duration-300 font-bold text-white border border-white/10"
+              >
+                <Plus size={20} strokeWidth={3} /> <span className="hidden sm:inline">Adicionar</span>
+              </button>
+            </>
           )}
 
           <button
@@ -422,6 +502,17 @@ function App() {
         onClose={() => setIsModalOpen(false)}
         onSave={handleSaveProfile}
         initialData={editingClient}
+      />
+
+      <ImportClientsModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onImportSuccess={() => {
+          setIsImportModalOpen(false);
+          handleRefresh(clients); // Refresh list
+          fetchClients(); // Re-fetch from DB
+        }}
+        existingUsernames={clients.map(c => c.username)}
       />
 
       <MobileNav

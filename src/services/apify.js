@@ -1,14 +1,31 @@
 // Service to interact with Apify
 // Using the local proxy configured in vite.config.js to avoid CORS issues
 
-const APIFY_TOKEN = import.meta.env.VITE_APIFY_TOKEN;
-// Usando ~ em vez de / para garantir compatibilidade na URL da API
+// Usar import.meta.env para o frontend (Vite) ou process.env para o backend (Node/Vercel)
+const getEnv = (key) => {
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
+        return import.meta.env[key];
+    }
+    return process.env[key];
+};
+
+const APIFY_TOKEN = getEnv('VITE_APIFY_TOKEN');
 const ACTOR_ID = 'apify~instagram-profile-scraper';
+
+const getBaseUrl = () => {
+    // No frontend, usamos o proxy '/api/apify' (configurado em vercel.json ou vite.config.js)
+    if (typeof window !== 'undefined') {
+        return '/api/apify';
+    }
+    // No backend (Vercel Functions), chamamos a API diretamento
+    return 'https://api.apify.com/v2';
+};
 
 export const fetchInstagramData = async (usernames) => {
     console.log('Fetching data for:', usernames);
     console.log('Using Token:', APIFY_TOKEN ? `Present (${APIFY_TOKEN.substring(0, 5)}...)` : 'MISSING');
 
+    const baseUrl = getBaseUrl();
     // 1. Start the Actor Run
     try {
         console.log(`Iniciando execução do Actor ${ACTOR_ID} via proxy...`);
@@ -21,9 +38,7 @@ export const fetchInstagramData = async (usernames) => {
             headers['Authorization'] = `Bearer ${APIFY_TOKEN}`;
         }
 
-        // Use the proxy path '/api/apify' instead of 'https://api.apify.com/v2'
-        // Removed token from URL, using Header instead
-        const runResponse = await fetch(`/api/apify/acts/${ACTOR_ID}/runs`, {
+        const runResponse = await fetch(`${baseUrl}/acts/${ACTOR_ID}/runs`, {
             method: 'POST',
             headers: headers,
             body: JSON.stringify({
@@ -52,7 +67,7 @@ export const fetchInstagramData = async (usernames) => {
             console.log(`Verificando status (Tentativa ${attempts})...`);
             await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
 
-            const statusResponse = await fetch(`/api/apify/acts/${ACTOR_ID}/runs/${runId}`, {
+            const statusResponse = await fetch(`${baseUrl}/acts/${ACTOR_ID}/runs/${runId}`, {
                 headers: headers
             });
 
@@ -76,9 +91,8 @@ export const fetchInstagramData = async (usernames) => {
         }
 
         // 3. Fetch Results
-        console.log('Buscando resultados do dataset:', datasetId);
         // Endpoint CORRETO: /datasets/{datasetId}/items
-        const datasetResponse = await fetch(`/api/apify/datasets/${datasetId}/items`, {
+        const datasetResponse = await fetch(`${baseUrl}/datasets/${datasetId}/items`, {
             headers: headers
         });
         if (!datasetResponse.ok) {
