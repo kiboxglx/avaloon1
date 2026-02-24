@@ -1,3 +1,4 @@
+import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Monitor, RefreshCw, Plus, LogOut, Upload, MessageSquare } from 'lucide-react';
 import ClientCard from './components/ClientCard';
 import ProfileModal from './components/ProfileModal';
