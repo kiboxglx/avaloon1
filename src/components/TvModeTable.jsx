@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 const getTimeAgo = (dateString) => {
     if (!dateString) return 'Hoje';
@@ -17,10 +17,15 @@ const getTimeAgo = (dateString) => {
     }
 };
 
+const ROW_GAP = 12; // gap-3 entre as linhas
+const DEFAULT_ROW_HEIGHT = 88; // fallback até a primeira medição real
+
 const TvModeTable = ({ clients, onExit }) => {
     const [startIndex, setStartIndex] = useState(0);
     const [currentTime, setCurrentTime] = useState(new Date());
-    const ITEMS_PER_PAGE = 7;
+    const [itemsPerPage, setItemsPerPage] = useState(7);
+    const [rowHeight, setRowHeight] = useState(DEFAULT_ROW_HEIGHT);
+    const bodyRef = useRef(null);
     const PAGE_DURATION = 10000; // 10 seconds per page
 
     useEffect(() => {
@@ -28,19 +33,49 @@ const TvModeTable = ({ clients, onExit }) => {
         return () => clearInterval(timer);
     }, []);
 
+    // Calcula dinamicamente quantas linhas cabem na altura disponível.
+    // Em TVs verticais (portrait) cabem muito mais itens do que os 7 fixos,
+    // então preenchemos o espaço em vez de deixar um vazio embaixo.
+    useEffect(() => {
+        const calc = () => {
+            const container = bodyRef.current;
+            if (!container) return;
+            const firstRow = container.querySelector('[data-tv-row]');
+            const measuredRow = firstRow ? firstRow.offsetHeight : DEFAULT_ROW_HEIGHT;
+            const cs = window.getComputedStyle(container);
+            const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+            const usable = container.clientHeight - padY;
+            const per = Math.max(1, Math.floor((usable + ROW_GAP) / (measuredRow + ROW_GAP)));
+            setRowHeight(measuredRow);
+            setItemsPerPage((prev) => (prev === per ? prev : per));
+        };
+
+        calc();
+        const ro = new ResizeObserver(calc);
+        if (bodyRef.current) ro.observe(bodyRef.current);
+        window.addEventListener('orientationchange', calc);
+        return () => {
+            ro.disconnect();
+            window.removeEventListener('orientationchange', calc);
+        };
+    }, [clients.length, itemsPerPage]);
+
     useEffect(() => {
         const interval = setInterval(() => {
             setStartIndex((prev) => {
-                const next = prev + ITEMS_PER_PAGE;
+                const next = prev + itemsPerPage;
                 return next >= clients.length ? 0 : next;
             });
         }, PAGE_DURATION);
         return () => clearInterval(interval);
-    }, [clients.length]);
+    }, [clients.length, itemsPerPage]);
 
-    const visibleClients = clients.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-    const totalPages = Math.ceil(clients.length / ITEMS_PER_PAGE);
-    const currentPage = Math.floor(startIndex / ITEMS_PER_PAGE) + 1;
+    // startIndex pode transbordar quando o nº de itens por página muda (resize/rotação).
+    // Derivamos um índice seguro no render em vez de sincronizar via efeito.
+    const safeStartIndex = startIndex >= clients.length ? 0 : startIndex;
+    const visibleClients = clients.slice(safeStartIndex, safeStartIndex + itemsPerPage);
+    const totalPages = Math.max(1, Math.ceil(clients.length / itemsPerPage));
+    const currentPage = Math.floor(safeStartIndex / itemsPerPage) + 1;
 
     return (
         <div className="fixed inset-0 z-50 bg-zinc-950 flex flex-col font-sans selection:bg-yellow-500 selection:text-black overflow-y-auto md:overflow-hidden">
@@ -77,20 +112,21 @@ const TvModeTable = ({ clients, onExit }) => {
             </div>
 
             {/* Body with Flip Animation */}
-            <div className="flex-1 p-4 md:p-6 overflow-y-auto md:overflow-hidden bg-zinc-950 perspective-1000">
+            <div ref={bodyRef} className="flex-1 p-4 md:p-6 overflow-y-auto md:overflow-hidden bg-zinc-950 perspective-1000">
                 <div className="flex flex-col gap-3">
                     {visibleClients.map((client, index) => {
                         const isAlert = client.days >= 3;
                         const isWarning = client.days === 2;
-                        // Key includes startIndex to trigger re-render and animation on page change
-                        const uniqueKey = `${client.id}-${startIndex}`;
+                        // Key includes safeStartIndex to trigger re-render and animation on page change
+                        const uniqueKey = `${client.id}-${safeStartIndex}`;
 
                         return (
                             <div
                                 key={uniqueKey}
+                                data-tv-row
                                 className={`flex flex-col md:grid md:grid-cols-12 gap-2 md:gap-4 p-4 md:px-8 border border-zinc-800/50 bg-zinc-900/50 items-start md:items-center rounded-sm animate-flip-in shadow-lg relative overflow-hidden`}
                                 style={{
-                                    animationDelay: `${index * 150}ms`,
+                                    animationDelay: `${Math.min(index * 150, 1500)}ms`,
                                     borderLeft: isAlert ? '4px solid #ef4444' : isWarning ? '4px solid #eab308' : '4px solid #22c55e'
                                 }}
                             >
@@ -155,9 +191,9 @@ const TvModeTable = ({ clients, onExit }) => {
                     })}
 
                     {/* Empty rows filler to maintain layout stability (Desktop only) */}
-                    <div className="hidden md:block">
-                        {visibleClients.length < ITEMS_PER_PAGE && Array.from({ length: ITEMS_PER_PAGE - visibleClients.length }).map((_, i) => (
-                            <div key={`empty-${i}`} className="h-[88px] border border-zinc-900/30 bg-zinc-950/30 rounded-sm mb-3"></div>
+                    <div className="hidden md:flex flex-col gap-3">
+                        {visibleClients.length < itemsPerPage && Array.from({ length: itemsPerPage - visibleClients.length }).map((_, i) => (
+                            <div key={`empty-${i}`} style={{ height: rowHeight }} className="border border-zinc-900/30 bg-zinc-950/30 rounded-sm"></div>
                         ))}
                     </div>
                 </div>
@@ -189,7 +225,7 @@ const TvModeTable = ({ clients, onExit }) => {
             <div className="bg-zinc-950 p-4 border-t border-zinc-800 flex justify-between items-center text-zinc-400 text-lg relative">
                 {/* Progress Bar */}
                 <div
-                    key={startIndex}
+                    key={safeStartIndex}
                     className="absolute top-0 left-0 h-1 bg-yellow-500"
                     style={{
                         width: '100%',
