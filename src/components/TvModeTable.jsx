@@ -19,12 +19,18 @@ const getTimeAgo = (dateString) => {
 
 const ROW_GAP = 12; // gap-3 entre as linhas
 const DEFAULT_ROW_HEIGHT = 88; // fallback até a primeira medição real
+// Abaixo desta largura CSS é um celular de verdade (layout empilhado).
+// Acima é monitor/TV — inclusive verticais em escala Windows/zoom alto,
+// onde 1080px físicos viram ~540-720px CSS. NÃO usar o breakpoint md: do
+// Tailwind aqui: ele olha a largura em px e troca pro layout mobile gigante.
+const COMPACT_MIN_WIDTH = 500;
 
 const TvModeTable = ({ clients, onExit }) => {
     const [startIndex, setStartIndex] = useState(0);
     const [currentTime, setCurrentTime] = useState(new Date());
     const [itemsPerPage, setItemsPerPage] = useState(7);
     const [rowHeight, setRowHeight] = useState(DEFAULT_ROW_HEIGHT);
+    const [compact, setCompact] = useState(true); // TV/monitor é tela grande por padrão
     const bodyRef = useRef(null);
     const PAGE_DURATION = 10000; // 10 seconds per page
 
@@ -33,13 +39,15 @@ const TvModeTable = ({ clients, onExit }) => {
         return () => clearInterval(timer);
     }, []);
 
-    // Calcula dinamicamente quantas linhas cabem na altura disponível.
-    // Em TVs verticais (portrait) cabem muito mais itens do que os 7 fixos,
-    // então preenchemos o espaço em vez de deixar um vazio embaixo.
+    // Calcula dinamicamente quantas linhas cabem na altura disponível e escolhe
+    // o layout (compacto x empilhado) pela LARGURA REAL medida — não pelo md:,
+    // que falha em telas verticais escaladas. Em TVs verticais cabem muito mais
+    // itens do que os 7 fixos, então preenchemos o espaço.
     useEffect(() => {
         const calc = () => {
             const container = bodyRef.current;
             if (!container) return;
+            const isCompact = container.clientWidth >= COMPACT_MIN_WIDTH;
             const firstRow = container.querySelector('[data-tv-row]');
             const measuredRow = firstRow ? firstRow.offsetHeight : DEFAULT_ROW_HEIGHT;
             const cs = window.getComputedStyle(container);
@@ -47,6 +55,7 @@ const TvModeTable = ({ clients, onExit }) => {
             const usable = container.clientHeight - padY;
             const per = Math.max(1, Math.floor((usable + ROW_GAP) / (measuredRow + ROW_GAP)));
             setRowHeight(measuredRow);
+            setCompact((prev) => (prev === isCompact ? prev : isCompact));
             setItemsPerPage((prev) => (prev === per ? prev : per));
         };
 
@@ -54,11 +63,13 @@ const TvModeTable = ({ clients, onExit }) => {
         const ro = new ResizeObserver(calc);
         if (bodyRef.current) ro.observe(bodyRef.current);
         window.addEventListener('orientationchange', calc);
+        window.addEventListener('resize', calc);
         return () => {
             ro.disconnect();
             window.removeEventListener('orientationchange', calc);
+            window.removeEventListener('resize', calc);
         };
-    }, [clients.length, itemsPerPage]);
+    }, [clients.length, itemsPerPage, compact]);
 
     useEffect(() => {
         const interval = setInterval(() => {
@@ -78,7 +89,7 @@ const TvModeTable = ({ clients, onExit }) => {
     const currentPage = Math.floor(safeStartIndex / itemsPerPage) + 1;
 
     return (
-        <div className="fixed inset-0 z-50 bg-zinc-950 flex flex-col font-sans selection:bg-yellow-500 selection:text-black overflow-y-auto md:overflow-hidden">
+        <div className={`fixed inset-0 z-50 bg-zinc-950 flex flex-col font-sans selection:bg-yellow-500 selection:text-black ${compact ? 'overflow-hidden' : 'overflow-y-auto'}`}>
             {/* Header for TV Mode */}
             <div className="bg-zinc-900 p-4 md:p-6 border-b border-zinc-800 flex flex-col md:flex-row justify-between items-center shadow-lg z-20 gap-4 md:gap-0">
                 <div className="flex flex-col md:flex-row items-center gap-2 md:gap-8 text-center md:text-left">
@@ -101,101 +112,118 @@ const TvModeTable = ({ clients, onExit }) => {
                 </button>
             </div>
 
-            {/* Table Header (Hidden on Mobile) */}
-            <div className="hidden md:block bg-zinc-950 border-b-2 border-zinc-800 z-10 shadow-xl">
-                <div className="grid grid-cols-12 gap-4 p-4 px-8 text-zinc-500 font-bold text-lg">
-                    <div className="col-span-4">Cliente</div>
-                    <div className="col-span-3 text-center">Gerente</div>
-                    <div className="col-span-2 text-center">Último Post</div>
-                    <div className="col-span-3 text-right">Situação</div>
+            {/* Table Header (só no layout compacto de monitor/TV) */}
+            {compact && (
+                <div className="bg-zinc-950 border-b-2 border-zinc-800 z-10 shadow-xl">
+                    <div className="grid grid-cols-12 gap-4 p-4 px-8 text-zinc-500 font-bold text-lg">
+                        <div className="col-span-4">Cliente</div>
+                        <div className="col-span-3 text-center">Gerente</div>
+                        <div className="col-span-2 text-center">Último Post</div>
+                        <div className="col-span-3 text-right">Situação</div>
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* Body with Flip Animation */}
-            <div ref={bodyRef} className="flex-1 p-4 md:p-6 overflow-y-auto md:overflow-hidden bg-zinc-950 perspective-1000">
+            <div ref={bodyRef} className={`flex-1 p-4 md:p-6 bg-zinc-950 perspective-1000 ${compact ? 'overflow-hidden' : 'overflow-y-auto'}`}>
                 <div className="flex flex-col gap-3">
                     {visibleClients.map((client, index) => {
                         const isAlert = client.days >= 3;
                         const isWarning = client.days === 2;
                         // Key includes safeStartIndex to trigger re-render and animation on page change
                         const uniqueKey = `${client.id}-${safeStartIndex}`;
+                        const postLabel = client.days === 0 ? getTimeAgo(client.latestPostDate) : `${client.days} DIAS`;
+                        const postColor = isAlert ? 'text-red-500' : isWarning ? 'text-yellow-500' : 'text-green-500';
 
                         return (
                             <div
                                 key={uniqueKey}
                                 data-tv-row
-                                className={`flex flex-col md:grid md:grid-cols-12 gap-2 md:gap-4 p-4 md:px-8 border border-zinc-800/50 bg-zinc-900/50 items-start md:items-center rounded-sm animate-flip-in shadow-lg relative overflow-hidden`}
+                                className={`${compact ? 'grid grid-cols-12 gap-4 px-8 items-center' : 'flex flex-col gap-2 items-start'} p-4 border border-zinc-800/50 bg-zinc-900/50 rounded-sm animate-flip-in shadow-lg relative overflow-hidden`}
                                 style={{
                                     animationDelay: `${Math.min(index * 150, 1500)}ms`,
                                     borderLeft: isAlert ? '4px solid #ef4444' : isWarning ? '4px solid #eab308' : '4px solid #22c55e'
                                 }}
                             >
                                 {/* Client Name & Username */}
-                                <div className="w-full md:col-span-4 mb-2 md:mb-0">
-                                    <div className="text-xl md:text-3xl font-bold text-white mb-1 truncate font-sans tracking-tight">
+                                <div className={compact ? 'col-span-4 min-w-0' : 'w-full mb-2'}>
+                                    <div className={`${compact ? 'text-2xl' : 'text-xl'} font-bold text-white mb-1 truncate font-sans tracking-tight`}>
                                         {client.name}
                                     </div>
-                                    <div className="text-zinc-500 text-sm md:text-lg font-sans truncate">
+                                    <div className={`text-zinc-500 ${compact ? 'text-base' : 'text-sm'} font-sans truncate`}>
                                         {client.username}
                                     </div>
                                 </div>
 
-                                {/* Mobile Layout: Grid for details */}
-                                <div className="w-full grid grid-cols-2 md:hidden gap-2 mb-2">
-                                    <div>
-                                        <div className="text-xs text-zinc-600 uppercase font-bold">Gerente</div>
-                                        <div className="text-zinc-300 text-lg font-sans">
-                                            {client.manager || 'João Silva'}
+                                {compact ? (
+                                    <>
+                                        {/* Compacto: Gerente */}
+                                        <div className="col-span-3 text-center min-w-0">
+                                            <div className="text-zinc-300 text-xl font-sans truncate">
+                                                {client.manager || 'João Silva'}
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div>
-                                        <div className="text-xs text-zinc-600 uppercase font-bold">Último Post</div>
-                                        <div className={`text-lg font-bold font-sans ${isAlert ? 'text-red-500' : isWarning ? 'text-yellow-500' : 'text-green-500'}`}>
-                                            {client.days === 0 ? getTimeAgo(client.latestPostDate) : `${client.days} DIAS`}
+
+                                        {/* Compacto: Último Post */}
+                                        <div className="col-span-2 text-center">
+                                            <div className={`text-xl font-bold font-sans ${postColor}`}>
+                                                {postLabel}
+                                            </div>
                                         </div>
-                                    </div>
-                                </div>
 
-                                {/* Desktop: Manager */}
-                                <div className="hidden md:block col-span-3 text-center">
-                                    <div className="text-zinc-300 text-2xl font-sans">
-                                        {client.manager || 'João Silva'}
-                                    </div>
-                                </div>
+                                        {/* Compacto: Situação */}
+                                        <div className="col-span-3 flex justify-end">
+                                            {isAlert ? (
+                                                <span className="text-red-500 font-black text-2xl tracking-tight animate-pulse">ATRASADO</span>
+                                            ) : isWarning ? (
+                                                <span className="text-yellow-500 font-bold text-2xl tracking-tight">ATENÇÃO</span>
+                                            ) : (
+                                                <span className="text-green-500 font-bold text-2xl tracking-tight">EM DIA</span>
+                                            )}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        {/* Empilhado (celular): detalhes em grid */}
+                                        <div className="w-full grid grid-cols-2 gap-2 mb-2">
+                                            <div>
+                                                <div className="text-xs text-zinc-600 uppercase font-bold">Gerente</div>
+                                                <div className="text-zinc-300 text-lg font-sans">
+                                                    {client.manager || 'João Silva'}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <div className="text-xs text-zinc-600 uppercase font-bold">Último Post</div>
+                                                <div className={`text-lg font-bold font-sans ${postColor}`}>
+                                                    {postLabel}
+                                                </div>
+                                            </div>
+                                        </div>
 
-                                {/* Desktop: Last Post Time */}
-                                <div className="hidden md:block col-span-2 text-center">
-                                    <div className={`text-2xl font-bold font-sans ${isAlert ? 'text-red-500' : isWarning ? 'text-yellow-500' : 'text-green-500'}`}>
-                                        {client.days === 0 ? getTimeAgo(client.latestPostDate) : `${client.days} DIAS`}
-                                    </div>
-                                </div>
-
-                                {/* Status Badge */}
-                                <div className="w-full md:col-span-3 flex justify-start md:justify-end mt-2 md:mt-0">
-                                    {isAlert ? (
-                                        <span className="text-red-500 font-black text-xl md:text-2xl tracking-tight animate-pulse">
-                                            ATRASADO
-                                        </span>
-                                    ) : isWarning ? (
-                                        <span className="text-yellow-500 font-bold text-xl md:text-2xl tracking-tight">
-                                            ATENÇÃO
-                                        </span>
-                                    ) : (
-                                        <span className="text-green-500 font-bold text-xl md:text-2xl tracking-tight">
-                                            EM DIA
-                                        </span>
-                                    )}
-                                </div>
+                                        {/* Empilhado: Situação */}
+                                        <div className="w-full flex justify-start mt-2">
+                                            {isAlert ? (
+                                                <span className="text-red-500 font-black text-xl tracking-tight animate-pulse">ATRASADO</span>
+                                            ) : isWarning ? (
+                                                <span className="text-yellow-500 font-bold text-xl tracking-tight">ATENÇÃO</span>
+                                            ) : (
+                                                <span className="text-green-500 font-bold text-xl tracking-tight">EM DIA</span>
+                                            )}
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         );
                     })}
 
-                    {/* Empty rows filler to maintain layout stability (Desktop only) */}
-                    <div className="hidden md:flex flex-col gap-3">
-                        {visibleClients.length < itemsPerPage && Array.from({ length: itemsPerPage - visibleClients.length }).map((_, i) => (
-                            <div key={`empty-${i}`} style={{ height: rowHeight }} className="border border-zinc-900/30 bg-zinc-950/30 rounded-sm"></div>
-                        ))}
-                    </div>
+                    {/* Linhas vazias para manter o layout estável (só no compacto) */}
+                    {compact && visibleClients.length < itemsPerPage && (
+                        <div className="flex flex-col gap-3">
+                            {Array.from({ length: itemsPerPage - visibleClients.length }).map((_, i) => (
+                                <div key={`empty-${i}`} style={{ height: rowHeight }} className="border border-zinc-900/30 bg-zinc-950/30 rounded-sm"></div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -218,6 +246,9 @@ const TvModeTable = ({ clients, onExit }) => {
                     animation: flipIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
                     transform-origin: top;
                     backface-visibility: hidden;
+                }
+                @media (prefers-reduced-motion: reduce) {
+                    .animate-flip-in { animation: none; }
                 }
             `}</style>
 
