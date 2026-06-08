@@ -41,14 +41,18 @@ const MobileNav = ({
                         </div>
                     )}
 
-                    <button
-                        onClick={onRefresh}
-                        disabled={isRefreshing}
-                        className={`flex flex-col items-center gap-1 p-2 transition-colors ${isRefreshing ? 'opacity-50' : 'text-zinc-400 active:text-white'}`}
-                    >
-                        <RefreshCw size={24} className={isRefreshing ? 'animate-spin' : ''} />
-                        <span className="text-[10px] font-medium">Atualizar</span>
-                    </button>
+                    {isAdmin ? (
+                        <button
+                            onClick={onRefresh}
+                            disabled={isRefreshing}
+                            className={`flex flex-col items-center gap-1 p-2 transition-colors ${isRefreshing ? 'opacity-50' : 'text-zinc-400 active:text-white'}`}
+                        >
+                            <RefreshCw size={24} className={isRefreshing ? 'animate-spin' : ''} />
+                            <span className="text-[10px] font-medium">Atualizar</span>
+                        </button>
+                    ) : (
+                        <div className="w-10" />
+                    )}
 
                     {/* Placeholder for symmetry or future button, maybe Profile/Settings */}
                     <div className="w-10" />

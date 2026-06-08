@@ -57,3 +57,97 @@ body {
 .animate-pulse-red {
   animation: pulse-red 2s infinite;
 }
+
+/* ===== Modo TV: blink de atraso ===== */
+/* So o VERMELHO pisca — laranja/verde ficam estaveis. O blink cria a urgencia
+   visual pra quem monitora cobrar postagem. Intensidade escala com o atraso. */
+@keyframes tv-blink {
+  0%, 100% {
+    background-color: rgba(239, 68, 68, 0.06);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+  50% {
+    background-color: rgba(239, 68, 68, 0.26);
+    box-shadow: 0 0 24px 2px rgba(239, 68, 68, 0.5);
+  }
+}
+
+/* Atraso severo (>= 5 dias): pisca mais rapido e mais forte — desconforto proposital.
+   ~1.6Hz fica bem abaixo do limite de 3Hz (seguranca p/ fotossensibilidade). */
+/* Degrau ON/OFF: primeira metade aceso (forte), segunda apagado. Strobe de verdade. */
+@keyframes tv-blink-severe {
+  0%, 49.9% {
+    background-color: rgba(239, 68, 68, 0.55);
+    box-shadow: 0 0 44px 6px rgba(239, 68, 68, 0.85);
+  }
+  50%, 100% {
+    background-color: rgba(239, 68, 68, 0.08);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+.tv-blink {
+  animation: tv-blink 2.6s ease-in-out infinite;
+}
+
+.tv-blink-severe {
+  animation: tv-blink-severe 1.6s ease-in-out infinite;
+}
+
+/* Texto "ATRASADO" piscando junto no caso severo (degrau ON/OFF). */
+@keyframes tv-blink-text {
+  0%, 49.9% { opacity: 1; }
+  50%, 100% { opacity: 0.25; }
+}
+
+.tv-blink-text {
+  animation: tv-blink-text 1.6s ease-in-out infinite;
+}
+
+/* NOTA: o modo TV NAO respeita prefers-reduced-motion de proposito.
+   E um painel de monitoramento onde o piscar e a FUNCAO (chamar atencao pro atraso),
+   nao decoracao. Muitas TVs/monitores de parede rodam com "reduzir movimento" ligado
+   no Windows, o que apagaria justamente o alerta. Frequencia ~1.4Hz (abaixo do limite
+   de 3Hz da WCAG p/ fotossensibilidade). */
+
+/* ===== Modo TV: transicao de entrada (flip) ===== */
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+@keyframes flipIn {
+  0% {
+    opacity: 0;
+    transform: rotateX(-90deg);
+  }
+  100% {
+    opacity: 1;
+    transform: rotateX(0);
+  }
+}
+
+.animate-flip-in {
+  animation: flipIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+  transform-origin: top;
+  backface-visibility: hidden;
+}
+
+/* Linha vermelha: faz a transicao de entrada (flip) E pisca ao mesmo tempo.
+   flip anima transform/opacity; blink anima background/box-shadow — sem conflito. */
+.tv-flip-blink {
+  animation:
+    flipIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) both,
+    tv-blink 2.6s ease-in-out infinite;
+  transform-origin: top;
+  backface-visibility: hidden;
+}
+
+.tv-flip-blink-severe {
+  animation:
+    flipIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) both,
+    tv-blink-severe 1.6s ease-in-out infinite;
+  transform-origin: top;
+  backface-visibility: hidden;
+}
+
+/* (sem guard de reduced-motion aqui — ver nota acima: o blink do modo TV e funcional) */

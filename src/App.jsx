@@ -3,9 +3,11 @@ import { Search, Monitor, RefreshCw, Plus, LogOut, Upload, MessageSquare } from 
 import ClientCard from './components/ClientCard';
 import ProfileModal from './components/ProfileModal';
 import ImportClientsModal from './components/ImportClientsModal';
+import RefreshConfirmModal from './components/RefreshConfirmModal';
 import TvModeTable from './components/TvModeTable';
-import { fetchInstagramData } from './services/apify';
+import { fetchInstagramData, fetchInstagramStories, resolveStoryDays } from './services/apify';
 import StatsOverview from './components/StatsOverview';
+import RefreshStatus from './components/RefreshStatus';
 import EmptyState from './components/EmptyState';
 import AvaloonLogo from './components/AvaloonLogo';
 import MobileNav from './components/MobileNav';
@@ -32,8 +34,11 @@ function App() {
   const [filterType, setFilterType] = useState('all'); // all, alert, onTrack
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isRefreshConfirmOpen, setIsRefreshConfirmOpen] = useState(false);
+  const [lastRefreshAt, setLastRefreshAt] = useState(null);
   const [isTvMode, setIsTvMode] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshingId, setRefreshingId] = useState(null); // id do card em refresh individual
   const [editingClient, setEditingClient] = useState(null);
   const [selectedManager, setSelectedManager] = useState('all');
   const [isTestingAlert, setIsTestingAlert] = useState(false);
@@ -72,6 +77,29 @@ function App() {
     };
 
     checkMaintenance();
+  }, []);
+
+  // Le a ultima atualizacao global (query isolada: se a coluna nao existir, nao quebra o kill-switch).
+  useEffect(() => {
+    const loadLastRefresh = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('avaloon_settings')
+          .select('last_refresh_at')
+          .eq('id', 1)
+          .single();
+        if (!error && data?.last_refresh_at) {
+          setLastRefreshAt(data.last_refresh_at);
+          return;
+        }
+      } catch (err) {
+        console.error('Erro ao ler ultima atualizacao:', err);
+      }
+      // Fallback local (por dispositivo) quando o global nao esta disponivel.
+      const local = localStorage.getItem('avaloon_last_refresh');
+      if (local) setLastRefreshAt(local);
+    };
+    loadLastRefresh();
   }, []);
 
   // Handle Auth Session
@@ -115,7 +143,11 @@ function App() {
       // Banco vazio = lista vazia (EmptyState). Sem auto-seed: clientes excluidos nao voltam.
       const formattedData = (data || []).map(client => ({
         ...client,
-        latestPostDate: client.latest_post_date // Map database column to app property
+        latestPostDate: client.latest_post_date, // Map database column to app property
+        latestStoryDate: client.last_story_date, // Story tracking (secundario)
+        // Stories nao tem historico: o "dias sem story" precisa subir mesmo sem scraping novo.
+        // Recalculamos a partir do ultimo carimbo toda vez que o app carrega.
+        story_days: resolveStoryDays(client.last_story_date, null).storyDays
       }));
       setClients(formattedData);
     } catch (error) {
@@ -221,35 +253,68 @@ function App() {
     const usernames = clientsToUpdate.map(c => c.username.replace('@', '')); // Remove @ for API if needed
 
     try {
+      const refreshedAt = new Date().toISOString();
       const updates = await fetchInstagramData(usernames);
 
-      // Update local state and Supabase
+      // Stories: camada aditiva e independente. Se falhar, seguimos so com posts.
+      let storyUpdates = {};
+      try {
+        storyUpdates = await fetchInstagramStories(usernames);
+      } catch (storyError) {
+        console.error('Falha ao buscar stories (seguindo sem stories):', storyError);
+      }
+
+      const pickUpdate = (map, client) => map[client.username.replace('@', '')] || map[client.username];
+
+      // Recalcula posts (inalterado) + stories (incremental: conta desde o ultimo registro).
       const updatedClients = clients.map(client => {
-        const usernameKey = client.username.replace('@', '');
-        const update = updates[usernameKey] || updates[client.username]; // Check both formats
+        const update = pickUpdate(updates, client); // Check both formats
+        const storyUpdate = pickUpdate(storyUpdates, client);
+        const prevStoryDate = client.latestStoryDate || client.last_story_date || null;
+        const story = resolveStoryDays(prevStoryDate, storyUpdate && storyUpdate.activeStoryDate);
+
+        let merged = client;
         if (update) {
-          return { ...client, ...update };
+          merged = { ...merged, ...update, last_refreshed_at: refreshedAt };
         }
-        return client;
+        if (story.latestStoryDate) {
+          merged = { ...merged, story_days: story.storyDays, latestStoryDate: story.latestStoryDate };
+        }
+        return merged;
       });
 
       setClients(updatedClients);
 
-      // Batch update to Supabase (doing one by one for simplicity in this MVP)
+      // Persiste no Supabase (um a um, MVP). Posts e stories vao no mesmo patch.
       for (const client of updatedClients) {
-        const usernameKey = client.username.replace('@', '');
-        const update = updates[usernameKey] || updates[client.username]; // Check both formats
+        const update = pickUpdate(updates, client); // Check both formats
+        const patch = {};
         if (update) {
-          await supabase.from('clients').update({
-            days: update.days,
-            followers: update.followers,
-            following: update.following,
-            posts: update.posts,
-            engagement: update.engagement,
-            latest_post_date: update.latestPostDate
-          }).eq('id', client.id);
+          patch.days = update.days;
+          patch.followers = update.followers;
+          patch.following = update.following;
+          patch.posts = update.posts;
+          patch.engagement = update.engagement;
+          patch.latest_post_date = update.latestPostDate;
+          patch.last_refreshed_at = refreshedAt; // carimba o card consultado
+        }
+        if (client.latestStoryDate) {
+          patch.story_days = client.story_days;
+          patch.last_story_date = client.latestStoryDate;
+        }
+        if (Object.keys(patch).length > 0) {
+          await supabase.from('clients').update(patch).eq('id', client.id);
         }
       }
+
+      // Carimba a ultima atualizacao GLOBAL (Supabase + fallback local).
+      try {
+        await supabase.from('avaloon_settings').update({ last_refresh_at: refreshedAt }).eq('id', 1);
+      } catch (settingsError) {
+        console.error('Nao foi possivel salvar a ultima atualizacao no Supabase:', settingsError);
+      }
+      localStorage.setItem('avaloon_last_refresh', refreshedAt);
+      setLastRefreshAt(refreshedAt);
 
     } catch (error) {
       console.error("Failed to refresh data:", error);
@@ -258,6 +323,69 @@ function App() {
       setIsRefreshing(false);
     }
   }, [clients]); // Dependency on clients to ensure it uses the latest list
+
+  // Clique manual em "Atualizar" abre o modal de confirmacao (economia de creditos Apify).
+  // Os refreshes automaticos (6h, add, import) NAO passam pelo modal.
+  const handleRefreshClick = () => setIsRefreshConfirmOpen(true);
+
+  const confirmRefresh = async () => {
+    await handleRefresh(clients);
+    setIsRefreshConfirmOpen(false);
+  };
+
+  // Atualiza SO um cliente (economia). NAO grava o last_refresh_at global — atualizar
+  // 1 card nao deve adiar o auto-refresh de TODOS nem mexer no "ultima atualizacao" geral.
+  const handleRefreshOne = useCallback(async (client) => {
+    if (!isAdmin || refreshingId) return;
+    setRefreshingId(client.id);
+    const usernameKey = client.username.replace('@', '');
+    try {
+      const updates = await fetchInstagramData([usernameKey]);
+      let storyUpdates = {};
+      try {
+        storyUpdates = await fetchInstagramStories([usernameKey]);
+      } catch (storyError) {
+        console.error('Falha ao buscar story deste cliente:', storyError);
+      }
+
+      const update = updates[usernameKey] || updates[client.username];
+      const storyUpdate = storyUpdates[usernameKey] || storyUpdates[client.username];
+      const prevStoryDate = client.latestStoryDate || client.last_story_date || null;
+      const story = resolveStoryDays(prevStoryDate, storyUpdate && storyUpdate.activeStoryDate);
+
+      const refreshedAt = new Date().toISOString();
+      const patch = { last_refreshed_at: refreshedAt }; // sempre carimba (inicia o cooldown)
+      if (update) {
+        patch.days = update.days;
+        patch.followers = update.followers;
+        patch.following = update.following;
+        patch.posts = update.posts;
+        patch.engagement = update.engagement;
+        patch.latest_post_date = update.latestPostDate;
+      }
+      if (story.latestStoryDate) {
+        patch.story_days = story.storyDays;
+        patch.last_story_date = story.latestStoryDate;
+      }
+
+      await supabase.from('clients').update(patch).eq('id', client.id);
+
+      // Atualiza so este cliente no estado local.
+      setClients(prev => prev.map(c => {
+        if (c.id !== client.id) return c;
+        let merged = { ...c, ...(update || {}), last_refreshed_at: refreshedAt };
+        if (story.latestStoryDate) {
+          merged = { ...merged, story_days: story.storyDays, latestStoryDate: story.latestStoryDate };
+        }
+        return merged;
+      }));
+    } catch (error) {
+      console.error('Falha ao atualizar este cliente:', error);
+      alert('Falha ao atualizar este perfil. Tente novamente.');
+    } finally {
+      setRefreshingId(null);
+    }
+  }, [isAdmin, refreshingId]);
 
   const handleTestAlert = async () => {
     if (!isAdmin) return;
@@ -289,15 +417,23 @@ function App() {
     }
   };
 
-  // Atualização automática a cada 6 horas
+  // Auto-refresh a cada 6h CONTADAS A PARTIR DA ULTIMA ATUALIZACAO (manual ou automatica).
+  // Se alguem atualiza manualmente, lastRefreshAt muda, este efeito reinicia e o proximo
+  // automatico e adiado — evitando dois refreshes (e dois gastos) na mesma janela de 6h.
   useEffect(() => {
     const SIX_HOURS = 6 * 60 * 60 * 1000;
-    const interval = setInterval(() => {
-      console.log('Executando atualização automática (6h)...');
-      handleRefresh();
-    }, SIX_HOURS);
+    const CHECK_INTERVAL = 60 * 1000; // verifica de minuto em minuto
+    const tick = () => {
+      if (isRefreshing) return;
+      const lastMs = lastRefreshAt ? new Date(lastRefreshAt).getTime() : 0;
+      if (Date.now() - lastMs >= SIX_HOURS) {
+        console.log('Auto-refresh: 6h desde a ultima atualizacao.');
+        handleRefresh();
+      }
+    };
+    const interval = setInterval(tick, CHECK_INTERVAL);
     return () => clearInterval(interval);
-  }, [handleRefresh]);
+  }, [handleRefresh, lastRefreshAt, isRefreshing]);
 
   const filteredClients = clients.filter(client => {
     const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -358,14 +494,16 @@ function App() {
             <Monitor size={18} /> <span className="hidden sm:inline">Modo TV</span>
           </button>
 
-          <button
-            onClick={() => handleRefresh(clients)}
-            disabled={isRefreshing}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl transition-all duration-300 font-medium border glass-button text-zinc-300 border-white/10 hover:border-secondary/50 hover:text-white ${isRefreshing ? 'opacity-50 cursor-not-allowed' : ''} `}
-          >
-            <RefreshCw size={18} className={isRefreshing ? 'animate-spin' : ''} />
-            <span className="hidden sm:inline">{isRefreshing ? 'Atualizando...' : 'Atualizar'}</span>
-          </button>
+          {isAdmin && (
+            <button
+              onClick={handleRefreshClick}
+              disabled={isRefreshing}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl transition-all duration-300 font-medium border glass-button text-zinc-300 border-white/10 hover:border-secondary/50 hover:text-white ${isRefreshing ? 'opacity-50 cursor-not-allowed' : ''} `}
+            >
+              <RefreshCw size={18} className={isRefreshing ? 'animate-spin' : ''} />
+              <span className="hidden sm:inline">{isRefreshing ? 'Atualizando...' : 'Atualizar todos'}</span>
+            </button>
+          )}
 
           {isAdmin && (
             <>
@@ -410,6 +548,7 @@ function App() {
 
       {/* Stats Overview */}
       {!isTvMode && <StatsOverview clients={clients} />}
+      {!isTvMode && <RefreshStatus lastRefreshAt={lastRefreshAt} isRefreshing={isRefreshing} />}
 
       {/* Filters */}
       <div className="glass-panel rounded-2xl p-2 mb-10 flex flex-col md:flex-row justify-between items-center gap-4">
@@ -471,6 +610,8 @@ function App() {
                   onEdit={() => handleEditClient(client)}
                   onDelete={() => handleDeleteClient(client.id)}
                   isAdmin={isAdmin} // Pass admin role
+                  onRefreshOne={() => handleRefreshOne(client)}
+                  isRefreshing={refreshingId === client.id}
                 />
               ))}
             </div>
@@ -490,6 +631,15 @@ function App() {
         initialData={editingClient}
       />
 
+      <RefreshConfirmModal
+        isOpen={isRefreshConfirmOpen}
+        onClose={() => setIsRefreshConfirmOpen(false)}
+        onConfirm={confirmRefresh}
+        lastRefreshAt={lastRefreshAt}
+        count={clients.length}
+        isRefreshing={isRefreshing}
+      />
+
       <ImportClientsModal
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
@@ -504,7 +654,7 @@ function App() {
       <MobileNav
         isTvMode={isTvMode}
         setIsTvMode={setIsTvMode}
-        onRefresh={() => handleRefresh(clients)}
+        onRefresh={handleRefreshClick}
         isRefreshing={isRefreshing}
         onAddClick={() => {
           setEditingClient(null);
