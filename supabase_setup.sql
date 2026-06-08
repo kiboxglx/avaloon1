@@ -12,7 +12,10 @@ create table clients (
   following text,
   posts text,
   engagement text,
-  latest_post_date text
+  latest_post_date text,
+  story_days integer default 0,
+  last_story_date text,
+  last_refreshed_at timestamptz
 );
 
 -- Habilitar RLS (Row Level Security) é uma boa prática, mas para começar simples e permitir leitura/escrita pública (cuidado em produção):

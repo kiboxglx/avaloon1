@@ -1,4 +1,4 @@
-import { fetchInstagramData } from '../src/services/apify.js';
+import { fetchInstagramData, fetchInstagramStories, resolveStoryDays } from '../src/services/apify.js';
 import { sendWhatsAppAlert } from '../src/services/whatsapp.js';
 import { supabase } from '../src/services/supabase.js';
 
@@ -17,7 +17,7 @@ export default async function handler(req, res) {
         // Buscar todos os clientes do Supabase (incluindo o telefone do gerente)
         const { data: clients, error: supabaseError } = await supabase
             .from('clients')
-            .select('username, name, manager, manager_phone');
+            .select('username, name, manager, manager_phone, last_story_date');
 
         if (supabaseError) {
             console.error('Erro ao buscar clientes no Supabase:', supabaseError);
@@ -33,6 +33,14 @@ export default async function handler(req, res) {
 
         const results = await fetchInstagramData(accounts);
 
+        // Stories: dado informativo extra. NAO altera o threshold/regra de alerta de posts.
+        let storyResults = {};
+        try {
+            storyResults = await fetchInstagramStories(accounts);
+        } catch (storyError) {
+            console.error('Falha ao buscar stories no cron (seguindo sem stories):', storyError);
+        }
+
         const alertsToNotifyDirector = [];
         const alertsToNotifyCEO = []; // Alertas graves (> 5 dias)
         const alertsByManager = {}; // Alertas agrupados por gerente
@@ -46,6 +54,11 @@ export default async function handler(req, res) {
 
             if (data.days >= threshold) {
                 const lastDate = data.latestPostDate ? new Date(data.latestPostDate).toLocaleDateString('pt-BR') : 'Desconhecida';
+                const storyData = storyResults[cleanUsername];
+                const storyDays = resolveStoryDays(
+                    client.last_story_date,
+                    storyData && storyData.activeStoryDate
+                ).storyDays;
 
                 // Adicionar à lista do Diretor
                 const alertInfo = {
@@ -53,7 +66,8 @@ export default async function handler(req, res) {
                     username: cleanUsername,
                     days: data.days,
                     manager: client.manager || 'Não atribuído',
-                    lastPost: lastDate
+                    lastPost: lastDate,
+                    storyDays
                 };
 
                 alertsToNotifyDirector.push(alertInfo);
@@ -83,7 +97,10 @@ export default async function handler(req, res) {
         for (const [phone, group] of Object.entries(alertsByManager)) {
             let managerMsg = `🚨 *Alertas de Gestão - Avaloon*\n\nOlá *${group.name}*,\n\nOs seguintes perfis sob sua responsabilidade precisam de postagem:\n\n`;
             group.alerts.forEach((a, i) => {
-                managerMsg += `${i + 1}. *${a.name}* (@${a.username})\n   ⏳ ${a.days} dias sem postar\n   📅 Última: ${a.lastPost}\n\n`;
+                const storyLine = a.storyDays !== null
+                    ? `\n   📸 Story: ${a.storyDays === 0 ? 'postou hoje' : `${a.storyDays} dias sem story`}`
+                    : '';
+                managerMsg += `${i + 1}. *${a.name}* (@${a.username})\n   ⏳ ${a.days} dias sem postar\n   📅 Última: ${a.lastPost}${storyLine}\n\n`;
             });
             managerMsg += `_Por favor, verifique com os clientes._`;
 
@@ -100,7 +117,8 @@ export default async function handler(req, res) {
             console.log(`Enviando resumo para o Diretor...`);
             let directorMsg = `📊 *Resumo Geral - Avaloon*\n\nExistem *${alertsToNotifyDirector.length}* perfis precisando de atenção:\n\n`;
             alertsToNotifyDirector.forEach((alert, index) => {
-                directorMsg += `${index + 1}. *${alert.name}* (@${alert.username})\n   ⏳ ${alert.days} dias | 👤 ${alert.manager}\n\n`;
+                const storyTag = alert.storyDays !== null ? ` | 📸 ${alert.storyDays}d s/ story` : '';
+                directorMsg += `${index + 1}. *${alert.name}* (@${alert.username})\n   ⏳ ${alert.days} dias | 👤 ${alert.manager}${storyTag}\n\n`;
             });
 
             const cleanDirectorPhone = directorPhone.replace(/[()-\s+]/g, '');
