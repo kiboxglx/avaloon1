@@ -59,29 +59,28 @@ body {
 }
 
 /* ===== Modo TV: blink de atraso ===== */
-/* So o VERMELHO pisca — laranja/verde ficam estaveis. O blink cria a urgencia
-   visual pra quem monitora cobrar postagem. Intensidade escala com o atraso. */
+/* Escala de atraso: 3-4 dias = LARANJA com blink suave; >= 5 dias = VERMELHO.
+   Intensidades baixas de proposito — fundo aceso demais cansa o olho em TV de parede. */
 @keyframes tv-blink {
   0%, 100% {
-    background-color: rgba(239, 68, 68, 0.06);
-    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    background-color: rgba(249, 115, 22, 0.04);
+    box-shadow: 0 0 0 0 rgba(249, 115, 22, 0);
   }
   50% {
-    background-color: rgba(239, 68, 68, 0.26);
-    box-shadow: 0 0 24px 2px rgba(239, 68, 68, 0.5);
+    background-color: rgba(249, 115, 22, 0.14);
+    box-shadow: 0 0 14px 1px rgba(249, 115, 22, 0.22);
   }
 }
 
-/* Atraso severo (>= 5 dias): pisca mais rapido e mais forte — desconforto proposital.
+/* Atraso severo (>= 5 dias): vermelho piscando mais rapido, mas sem strobe forte.
    ~1.6Hz fica bem abaixo do limite de 3Hz (seguranca p/ fotossensibilidade). */
-/* Degrau ON/OFF: primeira metade aceso (forte), segunda apagado. Strobe de verdade. */
 @keyframes tv-blink-severe {
   0%, 49.9% {
-    background-color: rgba(239, 68, 68, 0.55);
-    box-shadow: 0 0 44px 6px rgba(239, 68, 68, 0.85);
+    background-color: rgba(239, 68, 68, 0.22);
+    box-shadow: 0 0 20px 2px rgba(239, 68, 68, 0.3);
   }
   50%, 100% {
-    background-color: rgba(239, 68, 68, 0.08);
+    background-color: rgba(239, 68, 68, 0.05);
     box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
   }
 }
