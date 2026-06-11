@@ -17,9 +17,9 @@ const getTimeAgo = (dateString) => {
     }
 };
 
-// Story tracking. null/undefined = sem dado. Mesmas cores do post (verde<=1 / laranja=2 / vermelho>=3).
+// Story tracking. null/undefined = sem dado. Mesmas cores do post (verde<=1 / amarelo=2 / laranja 3-4 / vermelho>=5).
 const storyLabel = (d) => (d === null || d === undefined ? 'sem dados' : d === 0 ? 'hoje' : `${d}d`);
-const storyColor = (d) => (d === null || d === undefined) ? 'text-zinc-500' : d >= 3 ? 'text-red-500' : d === 2 ? 'text-yellow-500' : 'text-green-500';
+const storyColor = (d) => (d === null || d === undefined) ? 'text-zinc-500' : d >= 5 ? 'text-red-500' : d >= 3 ? 'text-orange-500' : d === 2 ? 'text-yellow-500' : 'text-green-500';
 
 const ROW_GAP = 12; // gap-3 entre as linhas
 const DEFAULT_ROW_HEIGHT = 88; // fallback até a primeira medição real
@@ -132,15 +132,15 @@ const TvModeTable = ({ clients, onExit }) => {
             <div ref={bodyRef} className={`flex-1 p-4 md:p-6 bg-zinc-950 perspective-1000 ${compact ? 'overflow-hidden' : 'overflow-y-auto'}`}>
                 <div className="flex flex-col gap-3">
                     {visibleClients.map((client, index) => {
-                        const isAlert = client.days >= 3;
+                        const isSevere = client.days >= 5; // atraso grave: vermelho piscando
+                        const isAlert = client.days >= 3; // 3-4 dias: laranja com blink suave
                         const isWarning = client.days === 2;
-                        const isSevere = client.days >= 5; // atraso grave: pisca mais forte
                         // Key includes safeStartIndex to trigger re-render and animation on page change
                         const uniqueKey = `${client.id}-${safeStartIndex}`;
                         const postLabel = client.days === 0 ? getTimeAgo(client.latestPostDate) : `${client.days} DIAS`;
-                        const postColor = isAlert ? 'text-red-500' : isWarning ? 'text-yellow-500' : 'text-green-500';
-                        // Todas as linhas fazem a transicao de entrada (flip). A vermelha tambem PISCA
-                        // ao mesmo tempo (classe combinada); quanto pior o atraso, mais forte o blink.
+                        const postColor = isSevere ? 'text-red-500' : isAlert ? 'text-orange-500' : isWarning ? 'text-yellow-500' : 'text-green-500';
+                        // Todas as linhas fazem a transicao de entrada (flip). As atrasadas tambem
+                        // piscam (classe combinada): 3-4d laranja suave, >=5d vermelho.
                         const rowAnim = isAlert ? (isSevere ? 'tv-flip-blink-severe' : 'tv-flip-blink') : 'animate-flip-in';
 
                         return (
@@ -150,7 +150,7 @@ const TvModeTable = ({ clients, onExit }) => {
                                 className={`${compact ? 'grid grid-cols-12 gap-4 px-8 items-center' : 'flex flex-col gap-2 items-start'} p-4 border border-zinc-800/50 ${isAlert ? '' : 'bg-zinc-900/50'} ${rowAnim} rounded-sm shadow-lg relative overflow-hidden`}
                                 style={{
                                     animationDelay: isAlert ? '0ms' : `${Math.min(index * 150, 1500)}ms`,
-                                    borderLeft: isAlert ? '4px solid #ef4444' : isWarning ? '4px solid #eab308' : '4px solid #22c55e'
+                                    borderLeft: isSevere ? '4px solid #ef4444' : isAlert ? '4px solid #f97316' : isWarning ? '4px solid #eab308' : '4px solid #22c55e'
                                 }}
                             >
                                 {/* Client Name & Username */}
@@ -186,7 +186,7 @@ const TvModeTable = ({ clients, onExit }) => {
                                         {/* Compacto: Situação */}
                                         <div className="col-span-3 flex justify-end">
                                             {isAlert ? (
-                                                <span className={`text-red-500 font-black text-2xl tracking-tight ${isSevere ? 'tv-blink-text' : 'animate-pulse'}`}>ATRASADO</span>
+                                                <span className={`${isSevere ? 'text-red-500 tv-blink-text' : 'text-orange-500 animate-pulse'} font-black text-2xl tracking-tight`}>ATRASADO</span>
                                             ) : isWarning ? (
                                                 <span className="text-yellow-500 font-bold text-2xl tracking-tight">ATENÇÃO</span>
                                             ) : (
@@ -219,7 +219,7 @@ const TvModeTable = ({ clients, onExit }) => {
                                         {/* Empilhado: Situação */}
                                         <div className="w-full flex justify-start mt-2">
                                             {isAlert ? (
-                                                <span className={`text-red-500 font-black text-xl tracking-tight ${isSevere ? 'tv-blink-text' : 'animate-pulse'}`}>ATRASADO</span>
+                                                <span className={`${isSevere ? 'text-red-500 tv-blink-text' : 'text-orange-500 animate-pulse'} font-black text-xl tracking-tight`}>ATRASADO</span>
                                             ) : isWarning ? (
                                                 <span className="text-yellow-500 font-bold text-xl tracking-tight">ATENÇÃO</span>
                                             ) : (
